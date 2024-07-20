@@ -30,7 +30,10 @@
   "content_scripts": [
     {
       "matches": ["*://sis.ssakhk.cz/*"],
-      "js": ["content.js"],
+      "js": [
+        "jquery-3.6.0.min.js",
+        "content.js"
+      ],
       "css": ["styles.css"],
       "run_at": "document_end"
     }

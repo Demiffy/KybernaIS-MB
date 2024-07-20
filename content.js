@@ -202,14 +202,93 @@ function checkForErrorAndRedirect() {
 window.addEventListener('load', checkForErrorAndRedirect);
 
 
-// Function to insert content and apply theme-specific styles
+// Function to fetch the update from the server and update the #updateTab element
+function fetchUpdate() {
+  console.log('[Kyberna MB] Initiating AJAX request to fetch update from server...');
+  $.ajax({
+    url: 'https://109.80.40.13:7000/update', // Server URL (HTTPS)
+    type: 'GET',
+    success: function(response) {
+      console.log('[Kyberna MB] Server response received.');
+      if (response && response.updated_content && response.updated_date) {
+        const dateSpan = document.querySelector('.dateSpan');
+        const updateTab = document.getElementById('updateTab');
+        dateSpan.innerText = response.updated_date;
+        const formattedUpdates = response.updated_content
+          .split('\n')
+          .map(line => `• ${line}`)
+          .join('<br>');
+        updateTab.innerHTML = formattedUpdates;
+        console.log('[Kyberna MB] Update content inserted into #updateTab.');
+
+        // Save the data to Chrome local storage
+        chrome.storage.local.set({
+          updateData: {
+            date: response.updated_date,
+            content: response.updated_content
+          }
+        }, function() {
+          if (chrome.runtime.lastError) {
+            console.error('[Kyberna MB] Error saving data to Chrome local storage:', chrome.runtime.lastError);
+          } else {
+            console.log('[Kyberna MB] Update data saved to Chrome local storage.');
+          }
+        });
+      } else {
+        console.log('[Kyberna MB] Server response does not contain expected data.');
+      }
+    },
+    error: function(jqXHR, textStatus, errorThrown) {
+      console.error('[Kyberna MB] Error loading data:', textStatus, errorThrown);
+      console.log('[Kyberna MB] Detailed error information:', jqXHR);
+
+      // Load data from Chrome local storage if server is offline
+      chrome.storage.local.get(['updateData'], function(result) {
+        if (chrome.runtime.lastError) {
+          console.error('[Kyberna MB] Error loading data from Chrome local storage:', chrome.runtime.lastError);
+        } else if (result.updateData) {
+          const dateSpan = document.querySelector('.dateSpan');
+          const updateTab = document.getElementById('updateTab');
+          dateSpan.innerText = result.updateData.date;
+          const formattedUpdates = result.updateData.content
+            .split('\n')
+            .map(line => `• ${line}`)
+            .join('<br>');
+          updateTab.innerHTML = formattedUpdates;
+          console.log('[Kyberna MB] Loaded update data from Chrome local storage.');
+        } else {
+          console.log('[Kyberna MB] No saved update data found in Chrome local storage. Setting to default values.');
+          const dateSpan = document.querySelector('.dateSpan');
+          const updateTab = document.getElementById('updateTab');
+          dateSpan.innerText = 'NaN';
+          updateTab.innerHTML = 'Unavailable';
+        }
+      });
+    }
+  });
+}
+
+// Function to insert update.html into news page and apply styles
 function insertContentAndApplyStyles() {
+  console.log('[Kyberna MB] Running insertContentAndApplyStyles.');
+
   if (window.location.href === 'https://sis.ssakhk.cz/News') {
+    console.log('[Kyberna MB] Correct URL detected.');
+
     const h2Element = document.querySelector('h2.text-center');
+    if (!h2Element) {
+      console.error('[Kyberna MB] h2 element not found.');
+      return;
+    }
+
+    console.log('[Kyberna MB] h2 element found.');
+    
     const version = chrome.runtime.getManifest().version;
+    console.log('[Kyberna MB] Extension version:', version);
 
     // Function to determine the CSS file name based on the selected theme
     function determineCssFileName(theme) {
+      console.log('[Kyberna MB] Determining CSS file name for theme:', theme);
       switch (theme) {
         case 'theme2': return 'updateStyles2.css';
         case 'theme3': return 'updateStyles3.css';
@@ -218,31 +297,74 @@ function insertContentAndApplyStyles() {
     }
 
     chrome.storage.local.get(['selectedTheme'], function(result) {
+      console.log('[Kyberna MB] Selected theme:', result.selectedTheme);
+      
       const cssFile = determineCssFileName(result.selectedTheme);
       const updateHtmlUrl = chrome.runtime.getURL('update.html');
       const updateCssUrl = chrome.runtime.getURL(cssFile);
 
+      console.log('[Kyberna MB] Fetching update.html from URL:', updateHtmlUrl);
+      console.log('[Kyberna MB] Fetching CSS from URL:', updateCssUrl);
+
       Promise.all([
-        fetch(updateHtmlUrl).then(response => response.text()),
-        fetch(updateCssUrl).then(response => response.text())
+        fetch(updateHtmlUrl).then(response => {
+          console.log('[Kyberna MB] Fetched update.html.');
+          return response.text();
+        }),
+        fetch(updateCssUrl).then(response => {
+          console.log('[Kyberna MB] Fetched CSS.');
+          return response.text();
+        })
       ])
       .then(([htmlContent, cssContent]) => {
+        console.log('[Kyberna MB] Processing fetched content.');
+        
         const updatedHtmlContent = htmlContent.replace(/\{\{version\}\}/g, version);
 
         const styleEl = document.createElement('style');
         styleEl.textContent = cssContent;
         document.head.appendChild(styleEl);
 
+        console.log('[Kyberna MB] Inserted CSS into head.');
+
         // Check if the h2 element exists
         if (h2Element) {
           h2Element.insertAdjacentHTML('afterend', updatedHtmlContent);
+          console.log('[Kyberna MB] Inserted update.html content after h2 element.');
+
+          // Load saved data from Chrome local storage immediately
+          chrome.storage.local.get(['updateData'], function(result) {
+            if (chrome.runtime.lastError) {
+              console.error('[Kyberna MB] Error loading data from Chrome local storage:', chrome.runtime.lastError);
+            } else if (result.updateData) {
+              const dateSpan = document.querySelector('.dateSpan');
+              const updateTab = document.getElementById('updateTab');
+              dateSpan.innerText = result.updateData.date;
+              const formattedUpdates = result.updateData.content
+                .split('\n')
+                .map(line => `• ${line}`)
+                .join('<br>');
+              updateTab.innerHTML = formattedUpdates;
+              console.log('[Kyberna MB] Loaded update data from Chrome local storage.');
+            } else {
+              console.log('[Kyberna MB] No saved update data found in Chrome local storage. Setting to default values.');
+              const dateSpan = document.querySelector('.dateSpan');
+              const updateTab = document.getElementById('updateTab');
+              dateSpan.innerText = 'NaN';
+              updateTab.innerHTML = 'Unavailable';
+            }
+          });
+
+          // Fetch the update from the server
+          fetchUpdate();
         }
       })
-      .catch(error => console.error('Error loading content:', error));
+      .catch(error => console.error('[Kyberna MB] Error loading content:', error));
     });
+  } else {
+    console.log('[Kyberna MB] URL does not match https://sis.ssakhk.cz/News.');
   }
 }
-
 
 // Function set the title of the page
 function setTitleIfURLMatches() {
