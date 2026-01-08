@@ -18,6 +18,8 @@
   },
 
   "permissions": [
+    "alarms",
+    "notifications",
     "storage",
     "scripting",
     "tabs"
